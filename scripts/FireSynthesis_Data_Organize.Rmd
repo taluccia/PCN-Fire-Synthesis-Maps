@@ -18,10 +18,48 @@ library(ggplot2)
 library(purrr)
 library(readr)
 library(cowplot)
-library(ggcorrplot)
+
+library(DT)
+library(sf)
+library(sp)
+library(ggmap) # devtools::install_github("dkahle/ggmap")
+library(ggrepel)
+library(raster)
+library(rgdal)
+library(rasterVis)
+library(RColorBrewer)
+library(cowplot)
+library(ggspatial)
+library(maps)
+library(RStoolbox)
+library(mapproj)
+library(magick)
+```
+
+# Individual data
+```{r}
+frost = read.csv("../data/2020-11-03_CSV/Frost_Permafrost_Data.csv")
+odon = read.csv("../data/2020-11-03_CSV/ODonnell_Permafrost_Data.csv")
+rocha = read.csv("../data/2020-11-03_CSV/Rocha_Permafrost_Data.csv")
+verav = read.csv("../data/2020-11-03_CSV/Veraverbeke_Permafrost_Data.csv")
 ```
 
 
+```{r}
+str(frost)
+```
+
+```{r}
+str(odon)
+```
+
+```{r}
+str(rocha)
+```
+
+```{r}
+str(verav)
+```
 
 # Data
 ```{r}
@@ -68,4 +106,303 @@ df <- list_of_files %>%
 df
 ```
 
+#Subsett data
 
+```{r}
+head(frost)
+```
+
+```{r}
+frost1 = frost %>% dplyr::select(last_name:boreal_tundra, burn_unburn) %>% na.omit()
+```
+
+```{r}
+odon1 = odon %>% dplyr::select(last_name:boreal_tundra, burn_unburn) %>% na.omit()
+```
+
+```{r}
+rocha1 = rocha %>% dplyr::select(last_name:boreal_tundra, burn_unburn) %>% na.omit()
+```
+
+```{r}
+verav1 = verav %>% dplyr::select(last_name:boreal_tundra, burn_unburn) %>% na.omit()
+```
+
+```{r}
+fs_df = rbind(frost1, odon1, rocha1, verav1)
+```
+
+```{r}
+summary(fs_df)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+write.csv(fs_df,"../outputs/2020-11-03_FS_data.csv", row.names = FALSE)
+```
+
+#  North Pole
+```{r}
+np = read.csv("../data/north_pole.csv")
+
+```
+# Projections
+
+## WGS 84
+WGS 84 need for gee
+```{r}
+wgs_proj =  "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs "
+
+```
+
+## Russia EE Area
+Equal Area projection for russia need for buffering hotspot data
+https://gis.stackexchange.com/questions/264093/projection-for-russia-map
+
++proj=aea +lat_1=50 +lat_2=70 +lat_0=56 +lon_0=100 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs 
++proj=aea +lat_1=50 +lat_2=70 +lat_0=56 +lon_0=100 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0 
+
+```{r}
+ee_russia = "+proj=aea +lat_1=50 +lat_2=70 +lat_0=56 +lon_0=100 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+```
+
+
+##Polar
++proj=stere +lat_0=90 +lat_ts=71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs 
+
+```{r}
+polar = "+proj=stere +lat_0=90 +lat_ts=71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs "
+```
+
+# BBOX
+
+```{r}
+coords_arctic = matrix(c(-180.0, 90.0,
+               180.0, 90.0,
+               180.0, 60.0, 
+               -180.0, 60.0), 
+             ncol = 2, byrow = TRUE)
+```
+
+```{r}
+arctic_coord = Polygon(coords_arctic)
+arctic_poly = SpatialPolygons(list(Polygons(list(arctic_coord), ID = "a")), proj4string=CRS(wgs_proj))
+```
+
+```{r}
+plot(arctic_poly, axes = TRUE)
+```
+
+#Create spatial points data frame with attributes
+## PCN data 
+Define Lat/Long
+```{r}
+coords_fs = cbind(fs_df$long, fs_df$lat)
+
+fs_df_pt <- SpatialPointsDataFrame(coords_fs, proj4string = CRS(wgs_proj), data = fs_df)
+```
+
+Transform to Equal area projection
+```{r}
+fs_df_polar <- spTransform(fs_df_pt, CRS(polar))
+```
+
+```{r}
+fs_df_polar_sf = st_as_sf(fs_df_polar)
+```
+
+
+```{r}
+st_write(fs_df_polar_sf, "../outputs/fs_df_polar_sf.shp", driver="ESRI Shapefile") 
+```
+##NP
+Define Lat/Long
+```{r}
+coords_np = cbind(np$long, np$lat)
+
+np_pt <- SpatialPointsDataFrame(coords_np, proj4string = CRS(wgs_proj), data = np)
+```
+
+Transform to polar projection
+```{r}
+np_polar <- spTransform(np_pt, CRS(polar))
+```
+
+```{r}
+np_polar_sf = st_as_sf(np_polar)
+```
+
+```{r}
+buf <- st_buffer(geom, dist = 2500000)
+```
+
+```{r}
+plot(np_polar_sf)
+plot(buf, add=TRUE)
+```
+
+## World 
+
+```{r}
+library("rnaturalearth")
+library("rnaturalearthdata")
+
+world1 <- ne_countries(scale = "medium", returnclass = "sf")
+class(world1)
+world1
+```
+
+
+
+
+
+```{r}
+world1_crop = st_crop(world1, xmin = -180, ymin = 45, xmax = 180, ymax = 83)
+```
+
+```{r}
+plot(world1_crop)
+```
+
+```{r}
+world1_crop_polar = st_transform(world1_crop, CRS(polar))
+
+```
+
+```{r}
+ggplot() +
+geom_sf(data = world1_crop_polar) 
+```
+
+# Permafrost
+```{r}
+permafrost = st_read("../data/permafrost/permaice.shp", "permaice")
+```
+
+```{r}
+pf_polar_select = st_read("../data/permafrost/permafrost_polar_select.shp", "permafrost_polar_select")
+```
+
+```{r}
+permafrost_wgs = st_transform(permafrost, CRS(wgs_proj))
+permafrost_wgs
+```
+
+
+
+```{r}
+pf_wgs_extent = permafrost_wgs %>% dplyr::select(EXTENT) %>% na.omit()
+```
+
+
+```{r}
+ggplot() +
+geom_sf(data = pf_wgs_extent) 
+```
+
+```{r}
+permafrost_polar = st_transform(permafrost, CRS(polar))
+permafrost_polar
+```
+
+
+```{r}
+st_write(permafrost_polar, "../outputs/permafrost_polar.shp", driver="ESRI Shapefile") 
+```
+
+```{r}
+plot(permafrost_polar)
+```
+```{r}
+head(permafrost_polar)
+summary(permafrost_polar)
+```
+
+
+
+## select variable to map
+```{r}
+pf_polar_extent = permafrost_polar %>% dplyr::select(EXTENT) %>% na.omit()
+head(pf_polar_extent)
+```
+
+```{r}
+pf_polar_select_ext = pf_polar_select %>% dplyr::select(EXTENT) %>% na.omit()
+```
+FID = c(8842, 4247, 2883, 6161 )
+
+```{r}
+pf_polar_extent_clip = pf_polar_extent %>% filter(st_contains(world1_crop_polar, ., sparse = FALSE))
+```
+
+```{r}
+pf_polar_numcode = permafrost_polar %>% dplyr::select(NUM_CODE)
+```
+
+```{r}
+fs_burn = fs_df_polar_sf %>% dplyr::select(burn_unburn)
+```
+
+
+```{r}
+# Defines the x axes required
+x_lines <- seq(-120,180, by = 60)
+```
+
+['#f6eff7','#bdc9e1','#67a9cf','#1c9099','#016c59']
+```{r}
+ggplot() +
+geom_sf(data = world1_crop_polar, fill = "grey", color = "grey", alpha = 0.8) +
+  geom_sf(data = pf_polar_select_ext, aes(fill = EXTENT, color = EXTENT)) +
+    scale_fill_manual(values = c("S" = '#f6eff7', 'I' = '#bdc9e1','D' = '#67a9cf','C' = '#1c9099')) +
+    scale_color_manual(values = c("S" = '#f6eff7', 'I' = '#bdc9e1','D' = '#67a9cf','C' = '#1c9099')) +
+  # Convert to polar coordinates
+  coord_map("ortho", orientation = c(90, 0, 0), xlim = c(-180, 180), ylim = c(70, 90)) +
+
+
+  geom_sf(data = fs_burn, size = 2) +
+  
+  # Removes Axes and labels
+  scale_x_continuous(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  xlab("") + 
+  ylab("") +
+  theme_bw() +
+  theme(panel.background = element_rect(color = NA))
+
+
+
+```
+
+
+```{r}
+# Defines the x axes required
+x_lines <- seq(-120,180, by = 60)
+
+map1 = ggplot() +
+  geom_polygon(data = world1_crop_polar, aes(x = long, y = lat), fill = "wheat", colour = "black", alpha = 0.8) +
+  coord_map("ortho", orientation = c(90, 0, 0)) +
+  scale_y_continuous(breaks = seq(45, 90, by = 10), labels = NULL) +
+  # Removes Axes and labels
+  scale_x_continuous(breaks = NULL) +
+  xlab("") + 
+  ylab("") +
+  # Adds labels
+  geom_text(aes(x = 0, y = seq(55, 85, by = 10), hjust = -0.2, label = paste0(seq(55, 85, by = 10), "°N"))) +
+  geom_text(aes(x = x_lines, y = 44, label = c("120°W", "60°W", "0°", "60°E", "120°E", "180°W"))) +
+  # Adds axes
+  geom_hline(aes(yintercept = 45), size = 1)  +
+  geom_segment(aes(y = 45, yend = 90, x = x_lines, xend = x_lines), linetype = "dashed") +
+# Change theme to remove axes and ticks
+  theme(panel.background = element_blank(),
+      panel.grid.major = element_line(size = 0.25, linetype = 'dashed',
+                                      colour = "black"),
+      axis.ticks=element_blank())
+
+
+map1
+  
+```
+  
+# World
+https://ggplot2-book.org/coord.html
