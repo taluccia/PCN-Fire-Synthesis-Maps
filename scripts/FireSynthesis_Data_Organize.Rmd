@@ -1,0 +1,71 @@
+---
+title: "Data-Organization"
+author: "Anna Talucci"
+date: "11/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(purrr)
+library(readr)
+library(cowplot)
+library(ggcorrplot)
+```
+
+
+
+# Data
+```{r}
+temp = list.files("../data/2020-11-03_CSV/", pattern="*.csv")
+```
+
+
+````{r}
+tbl <-
+    list.files("../data/2020-11-03_CSV",pattern = "*.csv") %>% 
+    map_df(~read_csv(.))
+```
+
+
+```{r}
+
+for (i in 1:length(temp)) assign(temp[i], read.csv(temp[i]))
+```
+
+
+```{r}
+fs_path <- "../data/2020-11-03_CSV"   # path to the data
+fs_files <- dir(fs_path, pattern = "*.csv") # get file names
+fs_files
+```
+
+```{r}
+fs_data <- fs_files %>%
+  # read in all the files, appending the path before the filename
+  map(~ read_csv(file.path(fs_path, .), .id = "file_name")) %>% 
+  reduce(rbind)
+fs_data
+```
+map_df(~read_csv(.x, col_types = cols(), col_names = FALSE), .id = "file_name")
+
+
+```{r}
+list_of_files <- list.files(path = "../data/2020-11-03_CSV",
+                            full.names = TRUE)
+list_of_files
+df <- list_of_files %>%
+  setNames(nm = .) %>% 
+  map_df(~read_csv(.x, col_types = cols(), col_names = TRUE), .id = "file_name")     
+df
+```
+
+
